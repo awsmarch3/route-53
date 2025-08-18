@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DNS Resolution Flow</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .flow-diagram {
+            position: relative;
+            margin: 40px 0;
+            min-height: 800px;
+        }
+        
+        .step {
+            position: absolute;
+            background: white;
+            border-radius: 15px;
+            padding: 15px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+            border: 3px solid;
+            min-width: 180px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .step:hover {
+            transform: translateY(-5px) scale(1.05);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+        }
+        
+        .client { border-color: #3498db; background: linear-gradient(135deg, #3498db, #2980b9); color: white; }
+        .local-dns { border-color: #e74c3c; background: linear-gradient(135deg, #e74c3c, #c0392b); color: white; }
+        .root-server { border-color: #f39c12; background: linear-gradient(135deg, #f39c12, #e67e22); color: white; }
+        .tld-server { border-color: #9b59b6; background: linear-gradient(135deg, #9b59b6, #8e44ad); color: white; }
+        .auth-server { border-color: #2ecc71; background: linear-gradient(135deg, #2ecc71, #27ae60); color: white; }
+        
+        .arrow {
+            position: absolute;
+            width: 0;
+            height: 0;
+            z-index: 10;
+        }
+        
+        .arrow-right {
+            border-left: 15px solid #34495e;
+            border-top: 8px solid transparent;
+            border-bottom: 8px solid transparent;
+        }
+        
+        .arrow-down {
+            border-top: 15px solid #34495e;
+            border-left: 8px solid transparent;
+            border-right: 8px solid transparent;
+        }
+        
+        .connection-line {
+            position: absolute;
+            background: #34495e;
+            z-index: 5;
+        }
+        
+        .horizontal-line { height: 3px; }
+        .vertical-line { width: 3px; }
+        
+        .step-number {
+            position: absolute;
+            top: -10px;
+            left: -10px;
+            background: #e74c3c;
+            color: white;
+            border-radius: 50%;
+            width: 25px;
+            height: 25px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        
+        .details {
+            background: #ecf0f1;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            border-left: 5px solid #3498db;
+        }
+        
+        .server-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+        
+        .server-card {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            border-top: 5px solid;
+        }
+        
+        .server-card h3 {
+            margin-top: 0;
+            font-size: 1.3em;
+        }
+        
+        .server-card.root { border-top-color: #f39c12; }
+        .server-card.tld { border-top-color: #9b59b6; }
+        .server-card.authoritative { border-top-color: #2ecc71; }
+        .server-card.recursive { border-top-color: #e74c3c; }
+        
+        .record-types {
+            background: #2c3e50;
+            color: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-top: 30px;
+        }
+        
+        .record-types h3 {
+            color: #ecf0f1;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .records-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        
+        .record {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #3498db;
+        }
+        
+        .interactive-note {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌐 DNS Resolution Flow: www.amazon.com</h1>
+        
+        <div class="interactive-note">
+            Click on any step in the diagram to see detailed information!
+        </div>
+        
+        <div class="flow-diagram">
+            <!-- Client -->
+            <div class="step client" style="top: 50px; left: 50px;" onclick="showDetails('client')">
+                <div class="step-number">1</div>
+                <h4>Your Computer</h4>
+                <p>Browser requests<br>www.amazon.com</p>
+            </div>
+            
+            <!-- Local DNS Resolver -->
+            <div class="step local-dns" style="top: 50px; left: 350px;" onclick="showDetails('recursive')">
+                <div class="step-number">2</div>
+                <h4>Recursive DNS<br>Resolver</h4>
+                <p>ISP's DNS Server<br>(e.g., 8.8.8.8)</p>
+            </div>
+            
+            <!-- Root DNS Server -->
+            <div class="step root-server" style="top: 200px; left: 350px;" onclick="showDetails('root')">
+                <div class="step-number">3</div>
+                <h4>Root DNS Server</h4>
+                <p>Returns .com<br>TLD servers</p>
+            </div>
+            
+            <!-- TLD Server -->
+            <div class="step tld-server" style="top: 350px; left: 350px;" onclick="showDetails('tld')">
+                <div class="step-number">4</div>
+                <h4>.com TLD Server</h4>
+                <p>Returns amazon.com<br>nameservers</p>
+            </div>
+            
+            <!-- Authoritative Server -->
+            <div class="step auth-server" style="top: 500px; left: 350px;" onclick="showDetails('authoritative')">
+                <div class="step-number">5</div>
+                <h4>Amazon's<br>Authoritative Server</h4>
+                <p>Returns IP address<br>for www.amazon.com</p>
+            </div>
+            
+            <!-- Connection Lines -->
+            <div class="connection-line horizontal-line" style="top: 82px; left: 230px; width: 120px;"></div>
+            <div class="arrow arrow-right" style="top: 75px; left: 335px;"></div>
+            
+            <div class="connection-line vertical-line" style="top: 95px; left: 432px; height: 105px;"></div>
+            <div class="arrow arrow-down" style="top: 185px; left: 425px;"></div>
+            
+            <div class="connection-line vertical-line" style="top: 245px; left: 432px; height: 105px;"></div>
+            <div class="arrow arrow-down" style="top: 335px; left: 425px;"></div>
+            
+            <div class="connection-line vertical-line" style="top: 395px; left: 432px; height: 105px;"></div>
+            <div class="arrow arrow-down" style="top: 485px; left: 425px;"></div>
+        </div>
+        
+        <div id="details" class="details" style="display: none;">
+            <!-- Details will be populated by JavaScript -->
+        </div>
+        
+        <div class="server-info">
+            <div class="server-card root">
+                <h3>🌍 Root DNS Servers</h3>
+                <ul>
+                    <li>13 root server clusters worldwide</li>
+                    <li>Named a.root-servers.net to m.root-servers.net</li>
+                    <li>Store TLD nameserver information</li>
+                    <li>Operated by various organizations</li>
+                    <li>Handle millions of queries per second</li>
+                </ul>
+            </div>
+            
+            <div class="server-card tld">
+                <h3>🏢 TLD Servers (.com)</h3>
+                <ul>
+                    <li>Managed by Verisign for .com domains</li>
+                    <li>Store authoritative nameserver info</li>
+                    <li>Distributed globally for performance</li>
+                    <li>Handle domain registration data</li>
+                    <li>Redirect to domain's nameservers</li>
+                </ul>
+            </div>
+            
+            <div class="server-card authoritative">
+                <h3>🎯 Authoritative Servers</h3>
+                <ul>
+                    <li>Amazon's own DNS servers</li>
+                    <li>ns1.p31.dynect.net, ns2.p31.dynect.net</li>
+                    <li>Store actual DNS records</li>
+                    <li>Provide final IP addresses</li>
+                    <li>Managed by domain owner</li>
+                </ul>
+            </div>
+            
+            <div class="server-card recursive">
+                <h3>🔄 Recursive Resolvers</h3>
+                <ul>
+                    <li>Your ISP's DNS or public DNS</li>
+                    <li>Google (8.8.8.8), Cloudflare (1.1.1.1)</li>
+                    <li>Cache responses for performance</li>
+                    <li>Query other servers on your behalf</li>
+                    <li>Handle the entire resolution process</li>
+                </ul>
+            </div>
+        </div>
+        
+        <div class="record-types">
+            <h3>📋 DNS Record Types Stored in Authoritative Servers</h3>
+            <div class="records-grid">
+                <div class="record">
+                    <strong>A Record</strong><br>
+                    Maps domain to IPv4<br>
+                    www.amazon.com → 54.239.28.85
+                </div>
+                <div class="record">
+                    <strong>AAAA Record</strong><br>
+                    Maps domain to IPv6<br>
+                    www.amazon.com → 2600:9000:...
+                </div>
+                <div class="record">
+                    <strong>CNAME</strong><br>
+                    Canonical name alias<br>
+                    www → amazon.com
+                </div>
+                <div class="record">
+                    <strong>MX Record</strong><br>
+                    Mail exchange servers<br>
+                    amazon.com → mail.amazon.com
+                </div>
+                <div class="record">
+                    <strong>NS Record</strong><br>
+                    Nameserver records<br>
+                    amazon.com → ns1.p31.dynect.net
+                </div>
+                <div class="record">
+                    <strong>TXT Record</strong><br>
+                    Text information<br>
+                    SPF, DKIM, verification
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showDetails(type) {
+            const detailsDiv = document.getElementById('details');
+            detailsDiv.style.display = 'block';
+            
+            const details = {
+                'client': {
+                    title: '1. Your Computer/Browser',
+                    content: `
+                        <strong>What happens:</strong><br>
+                        • You type www.amazon.com in your browser<br>
+                        • Browser checks its cache first<br>
+                        • If not cached, sends DNS query to configured DNS server<br>
+                        • Usually your ISP's DNS or public DNS (8.8.8.8, 1.1.1.1)<br><br>
+                        
+                        <strong>Cache Locations:</strong><br>
+                        • Browser cache (short-term)<br>
+                        • Operating system cache<br>
+                        • Router cache<br>
+                        • TTL (Time To Live) determines cache duration
+                    `
+                },
+                'recursive': {
+                    title: '2. Recursive DNS Resolver',
+                    content: `
+                        <strong>What it does:</strong><br>
+                        • Acts as middleman between you and authoritative servers<br>
+                        • Performs the entire DNS lookup process<br>
+                        • Caches responses for future queries<br>
+                        • Handles millions of queries from users<br><br>
+                        
+                        <strong>Popular Recursive Resolvers:</strong><br>
+                        • Google Public DNS: 8.8.8.8, 8.8.4.4<br>
+                        • Cloudflare: 1.1.1.1, 1.0.0.1<br>
+                        • Quad9: 9.9.9.9<br>
+                        • Your ISP's resolver
+                    `
+                },
+                'root': {
+                    title: '3. Root DNS Servers',
+                    content: `
+                        <strong>The Internet's Address Book:</strong><br>
+                        • 13 root server clusters (a-m.root-servers.net)<br>
+                        • Don't know specific domains, only TLD servers<br>
+                        • Return nameservers for .com, .org, .net, etc.<br>
+                        • Operated by organizations like Verisign, ISC, NASA<br><br>
+                        
+                        <strong>Response for .com query:</strong><br>
+                        • a.gtld-servers.net (192.5.6.30)<br>
+                        • b.gtld-servers.net (192.33.14.30)<br>
+                        • Plus 11 more .com TLD servers
+                    `
+                },
+                'tld': {
+                    title: '4. Top-Level Domain (.com) Servers',
+                    content: `
+                        <strong>What they store:</strong><br>
+                        • Nameserver records for all .com domains<br>
+                        • NS records pointing to authoritative servers<br>
+                        • Managed by registry operators (Verisign for .com)<br><br>
+                        
+                        <strong>For amazon.com, they return:</strong><br>
+                        • ns1.p31.dynect.net<br>
+                        • ns2.p31.dynect.net<br>
+                        • ns3.p31.dynect.net<br>
+                        • ns4.p31.dynect.net<br><br>
+                        
+                        These are Amazon's chosen nameservers
+                    `
+                },
+                'authoritative': {
+                    title: '5. Authoritative DNS Servers',
+                    content: `
+                        <strong>The Final Authority:</strong><br>
+                        • Amazon's own DNS servers<br>
+                        • Store actual DNS records for amazon.com<br>
+                        • Provide definitive answers<br>
+                        • Managed by Amazon's infrastructure team<br><br>
+                        
+                        <strong>Records they might return:</strong><br>
+                        • A: www.amazon.com → 54.239.28.85<br>
+                        • AAAA: www.amazon.com → 2600:9000:...<br>
+                        • CNAME: www → d3ag4hukkh62yn.cloudfront.net<br>
+                        • Multiple IPs for load balancing and CDN
+                    `
+                }
+            };
+            
+            const detail = details[type];
+            detailsDiv.innerHTML = `
+                <h3>${detail.title}</h3>
+                <div>${detail.content}</div>
+            `;
+            
+            detailsDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    </script>
+</body>
+</html>
