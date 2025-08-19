@@ -3,318 +3,642 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DNS Resolution Flow</title>
+    <title>Route 53 DNS Resolution - Complete Guide</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #ff9a56 0%, #ff6b95 50%, #c44569 100%);
             margin: 0;
             padding: 20px;
             min-height: 100vh;
         }
         
         .container {
-            max-width: 1200px;
+            max-width: 1500px;
             margin: 0 auto;
-            background: rgba(255, 255, 255, 0.95);
+            background: rgba(255, 255, 255, 0.96);
             border-radius: 20px;
             padding: 30px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.15);
         }
         
         h1 {
             text-align: center;
             color: #2c3e50;
             margin-bottom: 30px;
-            font-size: 2.5em;
+            font-size: 2.8em;
             text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+            background: linear-gradient(45deg, #ff6b95, #c44569);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .migration-notice {
+            background: linear-gradient(135deg, #ff9a56, #ff6b95);
+            color: white;
+            padding: 25px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            text-align: center;
+            font-size: 1.1em;
+            font-weight: bold;
+            box-shadow: 0 10px 25px rgba(255, 107, 149, 0.3);
+        }
+        
+        .flow-container {
+            overflow-x: auto;
+            margin: 30px 0;
+            padding: 20px 0;
         }
         
         .flow-diagram {
             position: relative;
-            margin: 40px 0;
-            min-height: 800px;
+            min-width: 1400px;
+            height: 500px;
+            background: linear-gradient(135deg, #ecf0f1, #bdc3c7);
+            border-radius: 15px;
+            padding: 40px;
+            border: 3px solid #ff6b95;
         }
         
         .step {
             position: absolute;
             background: white;
             border-radius: 15px;
-            padding: 15px;
+            padding: 20px;
             box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
             border: 3px solid;
-            min-width: 180px;
+            width: 160px;
             text-align: center;
             cursor: pointer;
             transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
         }
         
         .step:hover {
-            transform: translateY(-5px) scale(1.05);
-            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+            transform: translateY(-10px) scale(1.08);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
+            z-index: 100;
         }
         
         .client { border-color: #3498db; background: linear-gradient(135deg, #3498db, #2980b9); color: white; }
-        .local-dns { border-color: #e74c3c; background: linear-gradient(135deg, #e74c3c, #c0392b); color: white; }
-        .root-server { border-color: #f39c12; background: linear-gradient(135deg, #f39c12, #e67e22); color: white; }
-        .tld-server { border-color: #9b59b6; background: linear-gradient(135deg, #9b59b6, #8e44ad); color: white; }
-        .auth-server { border-color: #2ecc71; background: linear-gradient(135deg, #2ecc71, #27ae60); color: white; }
-        
-        .arrow {
-            position: absolute;
-            width: 0;
-            height: 0;
-            z-index: 10;
-        }
-        
-        .arrow-right {
-            border-left: 15px solid #34495e;
-            border-top: 8px solid transparent;
-            border-bottom: 8px solid transparent;
-        }
-        
-        .arrow-down {
-            border-top: 15px solid #34495e;
-            border-left: 8px solid transparent;
-            border-right: 8px solid transparent;
-        }
-        
-        .connection-line {
-            position: absolute;
-            background: #34495e;
-            z-index: 5;
-        }
-        
-        .horizontal-line { height: 3px; }
-        .vertical-line { width: 3px; }
+        .recursive { border-color: #e74c3c; background: linear-gradient(135deg, #e74c3c, #c0392b); color: white; }
+        .root { border-color: #f39c12; background: linear-gradient(135deg, #f39c12, #e67e22); color: white; }
+        .tld { border-color: #9b59b6; background: linear-gradient(135deg, #9b59b6, #8e44ad); color: white; }
+        .route53 { border-color: #ff6b95; background: linear-gradient(135deg, #ff6b95, #c44569); color: white; }
+        .zone { border-color: #1abc9c; background: linear-gradient(135deg, #1abc9c, #16a085); color: white; }
+        .response { border-color: #27ae60; background: linear-gradient(135deg, #2ecc71, #27ae60); color: white; }
         
         .step-number {
             position: absolute;
-            top: -10px;
-            left: -10px;
+            top: -15px;
+            left: -15px;
             background: #e74c3c;
             color: white;
             border-radius: 50%;
-            width: 25px;
-            height: 25px;
+            width: 30px;
+            height: 30px;
             display: flex;
             align-items: center;
             justify-content: center;
             font-weight: bold;
-            font-size: 14px;
+            font-size: 16px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
         }
         
-        .details {
-            background: #ecf0f1;
-            border-radius: 10px;
-            padding: 20px;
-            margin: 20px 0;
-            border-left: 5px solid #3498db;
+        .connection-line {
+            position: absolute;
+            background: linear-gradient(90deg, #ff6b95, #c44569);
+            height: 4px;
+            border-radius: 2px;
+            z-index: 5;
         }
         
-        .server-info {
+        .arrow {
+            position: absolute;
+            font-size: 24px;
+            color: #c44569;
+            z-index: 10;
+            animation: pulse 2s infinite;
+        }
+        
+        .query-info {
+            position: absolute;
+            background: rgba(196, 69, 105, 0.9);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 11px;
+            white-space: nowrap;
+            z-index: 15;
+        }
+        
+        .tools-section {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 20px;
-            margin-top: 30px;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 25px;
+            margin: 30px 0;
         }
         
-        .server-card {
+        .tool-card {
             background: white;
             border-radius: 15px;
-            padding: 20px;
+            padding: 25px;
             box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
             border-top: 5px solid;
         }
         
-        .server-card h3 {
+        .tool-card.windows { border-top-color: #0078d4; }
+        .tool-card.linux { border-top-color: #f39c12; }
+        .tool-card.mac { border-top-color: #95a5a6; }
+        .tool-card.general { border-top-color: #e74c3c; }
+        
+        .tool-card h3 {
             margin-top: 0;
-            font-size: 1.3em;
+            color: #2c3e50;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
         
-        .server-card.root { border-top-color: #f39c12; }
-        .server-card.tld { border-top-color: #9b59b6; }
-        .server-card.authoritative { border-top-color: #2ecc71; }
-        .server-card.recursive { border-top-color: #e74c3c; }
-        
-        .record-types {
+        .command {
             background: #2c3e50;
+            color: #ecf0f1;
+            padding: 12px 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            margin: 10px 0;
+            position: relative;
+            overflow-x: auto;
+        }
+        
+        .command::before {
+            content: "$ ";
+            color: #2ecc71;
+            font-weight: bold;
+        }
+        
+        .zone-file-section {
+            background: linear-gradient(135deg, #2c3e50, #34495e);
             color: white;
             border-radius: 15px;
-            padding: 25px;
-            margin-top: 30px;
+            padding: 30px;
+            margin: 30px 0;
         }
         
-        .record-types h3 {
-            color: #ecf0f1;
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        
-        .records-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-        }
-        
-        .record {
-            background: rgba(255, 255, 255, 0.1);
-            padding: 15px;
-            border-radius: 8px;
-            border-left: 4px solid #3498db;
-        }
-        
-        .interactive-note {
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white;
-            padding: 15px;
+        .zone-example {
+            background: rgba(0, 0, 0, 0.3);
             border-radius: 10px;
-            text-align: center;
-            margin-bottom: 20px;
-            font-weight: bold;
+            padding: 20px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            margin: 20px 0;
+            overflow-x: auto;
+        }
+        
+        .cache-section {
+            background: linear-gradient(135deg, #ff6b95, #c44569);
+            color: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin: 30px 0;
+        }
+        
+        .cache-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .cache-item {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .route53-features {
+            background: linear-gradient(135deg, #ff9a56, #ff6b95);
+            color: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin: 30px 0;
+        }
+        
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .feature-item {
+            background: rgba(255, 255, 255, 0.15);
+            padding: 20px;
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .details {
+            background: #ecf0f1;
+            border-radius: 15px;
+            padding: 25px;
+            margin: 20px 0;
+            border-left: 5px solid #ff6b95;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            display: none;
+        }
+        
+        .troubleshooting {
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
+            color: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin: 30px 0;
+        }
+        
+        .troubleshooting-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .troubleshooting-item {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+        }
+        
+        .copy-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        
+        .copy-btn:hover {
+            background: #2980b9;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🌐 DNS Resolution Flow: www.amazon.com</h1>
+        <h1>🚀 Route 53 DNS Resolution Complete Guide</h1>
         
-        <div class="interactive-note">
-            Click on any step in the diagram to see detailed information!
+        <div class="migration-notice">
+            🔄 You're migrating from traditional DNS to AWS Route 53 - Here's how the flow changes and what tools you need!
         </div>
         
-        <div class="flow-diagram">
-            <!-- Client -->
-            <div class="step client" style="top: 50px; left: 50px;" onclick="showDetails('client')">
-                <div class="step-number">1</div>
-                <h4>Your Computer</h4>
-                <p>Browser requests<br>www.amazon.com</p>
-            </div>
-            
-            <!-- Local DNS Resolver -->
-            <div class="step local-dns" style="top: 50px; left: 350px;" onclick="showDetails('recursive')">
-                <div class="step-number">2</div>
-                <h4>Recursive DNS<br>Resolver</h4>
-                <p>ISP's DNS Server<br>(e.g., 8.8.8.8)</p>
-            </div>
-            
-            <!-- Root DNS Server -->
-            <div class="step root-server" style="top: 200px; left: 350px;" onclick="showDetails('root')">
-                <div class="step-number">3</div>
-                <h4>Root DNS Server</h4>
-                <p>Returns .com<br>TLD servers</p>
-            </div>
-            
-            <!-- TLD Server -->
-            <div class="step tld-server" style="top: 350px; left: 350px;" onclick="showDetails('tld')">
-                <div class="step-number">4</div>
-                <h4>.com TLD Server</h4>
-                <p>Returns amazon.com<br>nameservers</p>
-            </div>
-            
-            <!-- Authoritative Server -->
-            <div class="step auth-server" style="top: 500px; left: 350px;" onclick="showDetails('authoritative')">
-                <div class="step-number">5</div>
-                <h4>Amazon's<br>Authoritative Server</h4>
-                <p>Returns IP address<br>for www.amazon.com</p>
-            </div>
-            
-            <!-- Connection Lines -->
-            <div class="connection-line horizontal-line" style="top: 82px; left: 230px; width: 120px;"></div>
-            <div class="arrow arrow-right" style="top: 75px; left: 335px;"></div>
-            
-            <div class="connection-line vertical-line" style="top: 95px; left: 432px; height: 105px;"></div>
-            <div class="arrow arrow-down" style="top: 185px; left: 425px;"></div>
-            
-            <div class="connection-line vertical-line" style="top: 245px; left: 432px; height: 105px;"></div>
-            <div class="arrow arrow-down" style="top: 335px; left: 425px;"></div>
-            
-            <div class="connection-line vertical-line" style="top: 395px; left: 432px; height: 105px;"></div>
-            <div class="arrow arrow-down" style="top: 485px; left: 425px;"></div>
-        </div>
-        
-        <div id="details" class="details" style="display: none;">
-            <!-- Details will be populated by JavaScript -->
-        </div>
-        
-        <div class="server-info">
-            <div class="server-card root">
-                <h3>🌍 Root DNS Servers</h3>
-                <ul>
-                    <li>13 root server clusters worldwide</li>
-                    <li>Named a.root-servers.net to m.root-servers.net</li>
-                    <li>Store TLD nameserver information</li>
-                    <li>Operated by various organizations</li>
-                    <li>Handle millions of queries per second</li>
-                </ul>
-            </div>
-            
-            <div class="server-card tld">
-                <h3>🏢 TLD Servers (.com)</h3>
-                <ul>
-                    <li>Managed by Verisign for .com domains</li>
-                    <li>Store authoritative nameserver info</li>
-                    <li>Distributed globally for performance</li>
-                    <li>Handle domain registration data</li>
-                    <li>Redirect to domain's nameservers</li>
-                </ul>
-            </div>
-            
-            <div class="server-card authoritative">
-                <h3>🎯 Authoritative Servers</h3>
-                <ul>
-                    <li>Amazon's own DNS servers</li>
-                    <li>ns1.p31.dynect.net, ns2.p31.dynect.net</li>
-                    <li>Store actual DNS records</li>
-                    <li>Provide final IP addresses</li>
-                    <li>Managed by domain owner</li>
-                </ul>
-            </div>
-            
-            <div class="server-card recursive">
-                <h3>🔄 Recursive Resolvers</h3>
-                <ul>
-                    <li>Your ISP's DNS or public DNS</li>
-                    <li>Google (8.8.8.8), Cloudflare (1.1.1.1)</li>
-                    <li>Cache responses for performance</li>
-                    <li>Query other servers on your behalf</li>
-                    <li>Handle the entire resolution process</li>
-                </ul>
+        <div class="flow-container">
+            <div class="flow-diagram">
+                <div class="step client" style="top: 150px; left: 50px;" onclick="showDetails('client')">
+                    <div class="step-number">1</div>
+                    <h4>🖥️ Client</h4>
+                    <p>Browser requests<br>www.example.com</p>
+                </div>
+                
+                <div class="step recursive" style="top: 150px; left: 250px;" onclick="showDetails('recursive')">
+                    <div class="step-number">2</div>
+                    <h4>🔄 Recursive DNS</h4>
+                    <p>ISP/Public DNS<br>8.8.8.8</p>
+                </div>
+                
+                <div class="step root" style="top: 150px; left: 450px;" onclick="showDetails('root')">
+                    <div class="step-number">3</div>
+                    <h4>🌍 Root Server</h4>
+                    <p>Returns .com<br>TLD servers</p>
+                </div>
+                
+                <div class="step tld" style="top: 150px; left: 650px;" onclick="showDetails('tld')">
+                    <div class="step-number">4</div>
+                    <h4>🏢 .com TLD</h4>
+                    <p>Returns Route 53<br>nameservers</p>
+                </div>
+                
+                <div class="step route53" style="top: 150px; left: 850px;" onclick="showDetails('route53')">
+                    <div class="step-number">5</div>
+                    <h4>⚡ Route 53</h4>
+                    <p>AWS DNS Service<br>ns-123.awsdns-15.com</p>
+                </div>
+                
+                <div class="step zone" style="top: 50px; left: 850px;" onclick="showDetails('zone')">
+                    <div class="step-number">6</div>
+                    <h4>📋 Zone File</h4>
+                    <p>DNS records<br>A, CNAME, MX</p>
+                </div>
+                
+                <div class="step response" style="top: 150px; left: 1050px;" onclick="showDetails('response')">
+                    <div class="step-number">7</div>
+                    <h4>✅ Response</h4>
+                    <p>IP: 1.2.3.4<br>Back to client</p>
+                </div>
+                
+                <!-- Connection Lines -->
+                <div class="connection-line" style="top: 182px; left: 210px; width: 40px;"></div>
+                <div class="arrow" style="top: 175px; left: 245px;">→</div>
+                <div class="query-info" style="top: 130px; left: 215px;">Query: www.example.com</div>
+                
+                <div class="connection-line" style="top: 182px; left: 410px; width: 40px;"></div>
+                <div class="arrow" style="top: 175px; left: 445px;">→</div>
+                <div class="query-info" style="top: 130px; left: 415px;">Where is .com?</div>
+                
+                <div class="connection-line" style="top: 182px; left: 610px; width: 40px;"></div>
+                <div class="arrow" style="top: 175px; left: 645px;">→</div>
+                <div class="query-info" style="top: 130px; left: 615px;">Where is example.com?</div>
+                
+                <div class="connection-line" style="top: 182px; left: 810px; width: 40px;"></div>
+                <div class="arrow" style="top: 175px; left: 845px;">→</div>
+                
+                <!-- Vertical line to zone file -->
+                <div class="connection-line" style="top: 110px; left: 932px; width: 4px; height: 40px;"></div>
+                <div class="arrow" style="top: 135px; left: 925px;">↓</div>
+                <div class="query-info" style="top: 115px; left: 940px;">Check Zone File</div>
+                
+                <div class="connection-line" style="top: 182px; left: 1010px; width: 40px;"></div>
+                <div class="arrow" style="top: 175px; left: 1045px;">→</div>
+                <div class="query-info" style="top: 200px; left: 1015px;">Return IP</div>
             </div>
         </div>
         
-        <div class="record-types">
-            <h3>📋 DNS Record Types Stored in Authoritative Servers</h3>
-            <div class="records-grid">
-                <div class="record">
-                    <strong>A Record</strong><br>
-                    Maps domain to IPv4<br>
-                    www.amazon.com → 54.239.28.85
+        <div id="details" class="details">
+            <h3>🎯 Click on any step above to see detailed information!</h3>
+            <p>The flow shows how Route 53 handles DNS resolution. Each step has specific roles and the zone file is where your actual DNS records are stored.</p>
+        </div>
+        
+        <div class="zone-file-section">
+            <h3>📋 Zone File Structure & Request Flow</h3>
+            <p><strong>Zone File:</strong> A text file containing DNS records for your domain. When you migrate to Route 53, your zone file is stored in AWS infrastructure but you manage it through console/API.</p>
+            
+            <h4>Sample Zone File for example.com:</h4>
+            <div class="zone-example">
+; Zone file for example.com
+$ORIGIN example.com.
+$TTL 300
+
+; SOA Record (Start of Authority)
+@    IN    SOA   ns-123.awsdns-15.com. admin.example.com. (
+                2024081901  ; Serial number
+                7200        ; Refresh interval
+                3600        ; Retry interval
+                1209600     ; Expire time
+                86400 )     ; Minimum TTL
+
+; Nameserver records
+@    IN    NS    ns-123.awsdns-15.com.
+@    IN    NS    ns-456.awsdns-20.net.
+@    IN    NS    ns-789.awsdns-25.org.
+@    IN    NS    ns-012.awsdns-30.co.uk.
+
+; A records (IPv4)
+@         IN    A     1.2.3.4
+www       IN    A     1.2.3.4
+api       IN    A     5.6.7.8
+mail      IN    A     9.10.11.12
+
+; AAAA records (IPv6)
+@         IN    AAAA  2001:db8::1
+www       IN    AAAA  2001:db8::1
+
+; CNAME records
+ftp       IN    CNAME www.example.com.
+blog      IN    CNAME www.example.com.
+
+; MX records
+@         IN    MX    10 mail.example.com.
+@         IN    MX    20 backup-mail.example.com.
+
+; TXT records
+@         IN    TXT   "v=spf1 include:_spf.google.com ~all"
+_dmarc    IN    TXT   "v=DMARC1; p=quarantine; rua=mailto:dmarc@example.com"
+            </div>
+            
+            <h4>🔄 Request Flow to Zone File:</h4>
+            <ol>
+                <li><strong>Client Query:</strong> Browser asks for www.example.com</li>
+                <li><strong>Route 53 Receives:</strong> Query reaches Route 53 nameservers</li>
+                <li><strong>Zone File Lookup:</strong> Route 53 checks zone file for matching record</li>
+                <li><strong>Record Matching:</strong> Finds "www IN A 1.2.3.4" in zone file</li>
+                <li><strong>Response Generation:</strong> Returns IP address with TTL</li>
+                <li><strong>Caching:</strong> Response cached at multiple levels based on TTL</li>
+            </ol>
+        </div>
+        
+        <div class="route53-features">
+            <h3>⚡ Why Route 53 is Superior</h3>
+            <div class="features-grid">
+                <div class="feature-item">
+                    <strong>🌍 Global Anycast Network</strong><br>
+                    • 100+ edge locations worldwide<br>
+                    • Sub-millisecond response times<br>
+                    • Automatic failover and load balancing
                 </div>
-                <div class="record">
-                    <strong>AAAA Record</strong><br>
-                    Maps domain to IPv6<br>
-                    www.amazon.com → 2600:9000:...
+                <div class="feature-item">
+                    <strong>🎯 Advanced Routing</strong><br>
+                    • Geolocation-based routing<br>
+                    • Weighted round-robin<br>
+                    • Health checks and failover
                 </div>
-                <div class="record">
-                    <strong>CNAME</strong><br>
-                    Canonical name alias<br>
-                    www → amazon.com
+                <div class="feature-item">
+                    <strong>🔧 Easy Management</strong><br>
+                    • AWS Console interface<br>
+                    • API and CLI support<br>
+                    • CloudFormation integration
                 </div>
-                <div class="record">
-                    <strong>MX Record</strong><br>
-                    Mail exchange servers<br>
-                    amazon.com → mail.amazon.com
+                <div class="feature-item">
+                    <strong>📊 Monitoring & Logging</strong><br>
+                    • Query logging to CloudWatch<br>
+                    • DNS analytics and metrics<br>
+                    • Real-time health monitoring
                 </div>
-                <div class="record">
-                    <strong>NS Record</strong><br>
-                    Nameserver records<br>
-                    amazon.com → ns1.p31.dynect.net
+            </div>
+        </div>
+        
+        <h2 style="text-align: center; color: #2c3e50; margin: 40px 0;">🛠️ DNS Tools & Commands by Operating System</h2>
+        
+        <div class="tools-section">
+            <div class="tool-card windows">
+                <h3>🪟 Windows Commands</h3>
+                
+                <h4>DNS Lookup:</h4>
+                <div class="command">nslookup www.example.com</div>
+                <div class="command">nslookup www.example.com 8.8.8.8</div>
+                <div class="command">nslookup -type=MX example.com</div>
+                <div class="command">nslookup -type=NS example.com</div>
+                
+                <h4>Advanced DNS Query:</h4>
+                <div class="command">Resolve-DnsName www.example.com -Type A</div>
+                <div class="command">Resolve-DnsName example.com -Type MX</div>
+                
+                <h4>Flush DNS Cache:</h4>
+                <div class="command">ipconfig /flushdns</div>
+                <div class="command">ipconfig /displaydns</div>
+                
+                <h4>DNS Configuration:</h4>
+                <div class="command">ipconfig /all</div>
+                <div class="command">netsh interface ip show dns</div>
+            </div>
+            
+            <div class="tool-card linux">
+                <h3>🐧 Linux Commands</h3>
+                
+                <h4>DNS Lookup:</h4>
+                <div class="command">dig www.example.com</div>
+                <div class="command">dig @8.8.8.8 www.example.com</div>
+                <div class="command">dig www.example.com +trace</div>
+                <div class="command">dig example.com MX</div>
+                <div class="command">dig example.com NS</div>
+                
+                <h4>Alternative Tools:</h4>
+                <div class="command">host www.example.com</div>
+                <div class="command">nslookup www.example.com</div>
+                
+                <h4>Flush DNS Cache:</h4>
+                <div class="command">sudo systemctl restart systemd-resolved</div>
+                <div class="command">sudo systemd-resolve --flush-caches</div>
+                <div class="command">sudo /etc/init.d/nscd restart</div>
+                
+                <h4>DNS Configuration:</h4>
+                <div class="command">cat /etc/resolv.conf</div>
+                <div class="command">systemd-resolve --status</div>
+            </div>
+            
+            <div class="tool-card mac">
+                <h3>🍎 macOS Commands</h3>
+                
+                <h4>DNS Lookup:</h4>
+                <div class="command">dig www.example.com</div>
+                <div class="command">dig @8.8.8.8 www.example.com +short</div>
+                <div class="command">dig www.example.com +trace</div>
+                <div class="command">host www.example.com</div>
+                
+                <h4>Flush DNS Cache:</h4>
+                <div class="command">sudo dscacheutil -flushcache</div>
+                <div class="command">sudo killall -HUP mDNSResponder</div>
+                
+                <h4>DNS Configuration:</h4>
+                <div class="command">scutil --dns</div>
+                <div class="command">networksetup -getdnsservers Wi-Fi</div>
+                
+                <h4>Change DNS Server:</h4>
+                <div class="command">networksetup -setdnsservers Wi-Fi 8.8.8.8 8.8.4.4</div>
+            </div>
+            
+            <div class="tool-card general">
+                <h3>🌐 Online Tools</h3>
+                
+                <h4>DNS Lookup Tools:</h4>
+                <ul>
+                    <li><strong>whatsmydns.net</strong> - Global DNS propagation checker</li>
+                    <li><strong>dns.google.com</strong> - Google's DNS resolver</li>
+                    <li><strong>dnschecker.org</strong> - Multiple location DNS check</li>
+                    <li><strong>mxtoolbox.com</strong> - Comprehensive DNS tools</li>
+                    <li><strong>intodns.com</strong> - DNS health checker</li>
+                </ul>
+                
+                <h4>AWS Route 53 Tools:</h4>
+                <ul>
+                    <li><strong>AWS Console</strong> - Web interface for Route 53</li>
+                    <li><strong>AWS CLI</strong> - Command line interface</li>
+                    <li><strong>Route 53 Health Check</strong> - Endpoint monitoring</li>
+                    <li><strong>CloudWatch</strong> - DNS query logging</li>
+                </ul>
+            </div>
+        </div>
+        
+        <div class="cache-section">
+            <h3>💾 DNS Cache Flush Commands - All Systems</h3>
+            <div class="cache-grid">
+                <div class="cache-item">
+                    <h4>🪟 Windows</h4>
+                    <div class="command" style="background: rgba(0,0,0,0.3);">ipconfig /flushdns</div>
+                    <p>Also clears: Browser cache, Windows DNS Client cache</p>
+                    <div class="command" style="background: rgba(0,0,0,0.3);">ipconfig /registerdns</div>
+                    <p>Re-registers DNS names</p>
                 </div>
-                <div class="record">
-                    <strong>TXT Record</strong><br>
-                    Text information<br>
-                    SPF, DKIM, verification
+                
+                <div class="cache-item">
+                    <h4>🐧 Linux (systemd)</h4>
+                    <div class="command" style="background: rgba(0,0,0,0.3);">sudo systemd-resolve --flush-caches</div>
+                    <div class="command" style="background: rgba(0,0,0,0.3);">sudo systemctl restart systemd-resolved</div>
+                    <p>For older systems:</p>
+                    <div class="command" style="background: rgba(0,0,0,0.3);">sudo /etc/init.d/nscd restart</div>
+                </div>
+                
+                <div class="cache-item">
+                    <h4>🍎 macOS</h4>
+                    <div class="command" style="background: rgba(0,0,0,0.3);">sudo dscacheutil -flushcache</div>
+                    <div class="command" style="background: rgba(0,0,0,0.3);">sudo killall -HUP mDNSResponder</div>
+                    <p>For macOS Big Sur and later</p>
+                </div>
+                
+                <div class="cache-item">
+                    <h4>🌐 Browser Cache</h4>
+                    <p><strong>Chrome:</strong> chrome://net-internals/#dns → Clear host cache</p>
+                    <p><strong>Firefox:</strong> about:config → network.dnsCacheExpiration → 0</p>
+                    <p><strong>Edge:</strong> edge://net-internals/#dns</p>
+                    <p><strong>Safari:</strong> Develop menu → Empty caches</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="troubleshooting">
+            <h3>🔧 Route 53 Troubleshooting Guide</h3>
+            <div class="troubleshooting-grid">
+                <div class="troubleshooting-item">
+                    <h4>❌ Domain Not Resolving</h4>
+                    <strong>Check:</strong><br>
+                    • Nameserver configuration at registrar<br>
+                    • Route 53 hosted zone exists<br>
+                    • DNS records are correct<br>
+                    <div class="command" style="background: rgba(0,0,0,0.3);">dig NS example.com</div>
+                    <div class="command" style="background: rgba(0,0,0,0.3);">dig www.example.com +trace</div>
+                </div>
+                
+                <div class="troubleshooting-item">
+                    <h4>🐌 Slow DNS Resolution</h4>
+                    <strong>Solutions:</strong><br>
+                    • Check TTL values (not too low)<br>
+                    • Verify Route 53 health checks<br>
+                    • Monitor CloudWatch metrics<br>
+                    <div class="command" style="background: rgba(0,0,0,0.3);">dig www.example.com +stats</div>
+                </div>
+                
+                <div class="troubleshooting-item">
+                    <h4>🔄 DNS Propagation Issues</h4>
+                    <strong>Verify:</strong><br>
+                    • Check multiple DNS servers<br>
+                    • Wait for TTL expiration<br>
+                    • Use online propagation checkers<br>
+                    <div class="command" style="background: rgba(0,0,0,0.3);">dig @8.8.8.8 www.example.com</div>
+                    <div class="command" style="background: rgba(0,0,0,0.3);">dig @1.1.1.1 www.example.com</div>
+                </div>
+                
+                <div class="troubleshooting-item">
+                    <h4>⚠️ Route 53 Health Check Failures</h4>
+                    <strong>Debug:</strong><br>
+                    • Check endpoint accessibility<br>
+                    • Verify security groups/firewall<br>
+                    • Review CloudWatch alarms<br>
+                    <div class="command" style="background: rgba(0,0,0,0.3);">aws route53 get-health-check --health-check-id HCID</div>
                 </div>
             </div>
         </div>
@@ -327,95 +651,6 @@
             
             const details = {
                 'client': {
-                    title: '1. Your Computer/Browser',
+                    title: '1. 🖥️ Client Request',
                     content: `
-                        <strong>What happens:</strong><br>
-                        • You type www.amazon.com in your browser<br>
-                        • Browser checks its cache first<br>
-                        • If not cached, sends DNS query to configured DNS server<br>
-                        • Usually your ISP's DNS or public DNS (8.8.8.8, 1.1.1.1)<br><br>
-                        
-                        <strong>Cache Locations:</strong><br>
-                        • Browser cache (short-term)<br>
-                        • Operating system cache<br>
-                        • Router cache<br>
-                        • TTL (Time To Live) determines cache duration
-                    `
-                },
-                'recursive': {
-                    title: '2. Recursive DNS Resolver',
-                    content: `
-                        <strong>What it does:</strong><br>
-                        • Acts as middleman between you and authoritative servers<br>
-                        • Performs the entire DNS lookup process<br>
-                        • Caches responses for future queries<br>
-                        • Handles millions of queries from users<br><br>
-                        
-                        <strong>Popular Recursive Resolvers:</strong><br>
-                        • Google Public DNS: 8.8.8.8, 8.8.4.4<br>
-                        • Cloudflare: 1.1.1.1, 1.0.0.1<br>
-                        • Quad9: 9.9.9.9<br>
-                        • Your ISP's resolver
-                    `
-                },
-                'root': {
-                    title: '3. Root DNS Servers',
-                    content: `
-                        <strong>The Internet's Address Book:</strong><br>
-                        • 13 root server clusters (a-m.root-servers.net)<br>
-                        • Don't know specific domains, only TLD servers<br>
-                        • Return nameservers for .com, .org, .net, etc.<br>
-                        • Operated by organizations like Verisign, ISC, NASA<br><br>
-                        
-                        <strong>Response for .com query:</strong><br>
-                        • a.gtld-servers.net (192.5.6.30)<br>
-                        • b.gtld-servers.net (192.33.14.30)<br>
-                        • Plus 11 more .com TLD servers
-                    `
-                },
-                'tld': {
-                    title: '4. Top-Level Domain (.com) Servers',
-                    content: `
-                        <strong>What they store:</strong><br>
-                        • Nameserver records for all .com domains<br>
-                        • NS records pointing to authoritative servers<br>
-                        • Managed by registry operators (Verisign for .com)<br><br>
-                        
-                        <strong>For amazon.com, they return:</strong><br>
-                        • ns1.p31.dynect.net<br>
-                        • ns2.p31.dynect.net<br>
-                        • ns3.p31.dynect.net<br>
-                        • ns4.p31.dynect.net<br><br>
-                        
-                        These are Amazon's chosen nameservers
-                    `
-                },
-                'authoritative': {
-                    title: '5. Authoritative DNS Servers',
-                    content: `
-                        <strong>The Final Authority:</strong><br>
-                        • Amazon's own DNS servers<br>
-                        • Store actual DNS records for amazon.com<br>
-                        • Provide definitive answers<br>
-                        • Managed by Amazon's infrastructure team<br><br>
-                        
-                        <strong>Records they might return:</strong><br>
-                        • A: www.amazon.com → 54.239.28.85<br>
-                        • AAAA: www.amazon.com → 2600:9000:...<br>
-                        • CNAME: www → d3ag4hukkh62yn.cloudfront.net<br>
-                        • Multiple IPs for load balancing and CDN
-                    `
-                }
-            };
-            
-            const detail = details[type];
-            detailsDiv.innerHTML = `
-                <h3>${detail.title}</h3>
-                <div>${detail.content}</div>
-            `;
-            
-            detailsDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-    </script>
-</body>
-</html>
+                        <strong
